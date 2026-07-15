@@ -1,0 +1,87 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userRole() {
+      return userDoc().data.role;
+    }
+
+    function isStaff() {
+      return isSignedIn() && userRole() in ['moderator', 'admin', 'superadmin'];
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && userRole() == 'superadmin';
+    }
+
+    // Perfil do usuário — criar/atualizar o próprio doc ao cadastrar ou logar
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+
+      match /pushTokens/{tokenId} {
+        allow read: if isOwner(userId) || isStaff();
+        allow create, update, delete: if isOwner(userId);
+      }
+
+      match /pointAwards/{awardId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.action in ['post_reaction', 'post_comment']
+          && request.resource.data.points in [2, 5];
+        allow update, delete: if false;
+      }
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow create: if isStaff();
+      allow update, delete: if isStaff();
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create, update, delete: if isStaff();
+
+      match /reactions/{userId} {
+        allow read: if true;
+        allow create, update: if isSignedIn() && request.auth.uid == userId;
+        allow delete: if isSignedIn() && (request.auth.uid == userId || isStaff());
+      }
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && (!('parentId' in request.resource.data)
+            || request.resource.data.parentId is string);
+        allow delete: if isSignedIn()
+          && (resource.data.userId == request.auth.uid || isStaff());
+
+        match /reactions/{userId} {
+          allow read: if true;
+          allow create, update: if isSignedIn() && request.auth.uid == userId;
+          allow delete: if isSignedIn() && (request.auth.uid == userId || isStaff());
+        }
+      }
+    }
+  }
+}
