@@ -5,6 +5,7 @@ import {
   registerWithEmail,
   loginWithEmail,
   loginWithGoogle,
+  completeGoogleRedirectLogin,
   resendEmailVerification,
   logoutUser,
   loadAuthenticatedProfile,
@@ -52,17 +53,33 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      await loadProfile(currentUser);
-      setLoading(false);
-    });
+    let disposed = false;
+    let unsubscribeAuth = () => {};
+
+    async function initAuth() {
+      try {
+        await completeGoogleRedirectLogin();
+      } catch (error) {
+        console.error("Erro no retorno do login Google:", error);
+      }
+
+      if (disposed) return;
+
+      unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+        setUser(currentUser);
+        await loadProfile(currentUser);
+        setLoading(false);
+      });
+    }
+
+    initAuth();
 
     const unsubscribeToken = subscribeAuthTokenChanges(() => {});
     const unsubscribeResume = setupMobileSessionRefresh();
 
     return () => {
-      unsubscribe();
+      disposed = true;
+      unsubscribeAuth();
       unsubscribeToken();
       unsubscribeResume();
     };
@@ -87,7 +104,7 @@ export function AuthProvider({ children }) {
 
   async function loginWithGoogleAccount() {
     const result = await loginWithGoogle();
-    return result.user;
+    return result?.user ?? null;
   }
 
   async function resendVerification(email, password) {

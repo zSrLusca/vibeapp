@@ -10,6 +10,10 @@ export function getAuthErrorMessage(code, fallbackMessage) {
     "auth/popup-closed-by-user": "Login com Google cancelado.",
     "auth/popup-blocked": "Popup bloqueado. Permita popups para este site.",
     "auth/cancelled-popup-request": "Login com Google cancelado.",
+    "auth/unauthorized-domain":
+      "Domínio não autorizado. Adicione a URL da Vercel no Firebase e no Google Cloud Console.",
+    "auth/argument-error":
+      "Erro de configuração do login. Verifique Google Sign-In no Firebase e o domínio da Vercel.",
     "auth/account-exists-with-different-credential":
       "Este e-mail já está vinculado a outro método de login.",
     "auth/operation-not-allowed":

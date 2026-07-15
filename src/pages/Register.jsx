@@ -43,8 +43,8 @@ export default function Register() {
     setError("");
 
     try {
-      await loginWithGoogle();
-      navigate("/comunidade");
+      const user = await loginWithGoogle();
+      if (user) navigate("/comunidade");
     } catch (err) {
       setError(err.message);
     } finally {

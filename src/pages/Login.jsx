@@ -34,8 +34,8 @@ export default function Login() {
     setError("");
 
     try {
-      await loginWithGoogle();
-      navigate(redirect);
+      const user = await loginWithGoogle();
+      if (user) navigate(redirect);
     } catch (err) {
       setError(err.message);
     } finally {

@@ -2,12 +2,12 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   sendEmailVerification,
   fetchSignInMethodsForEmail,
-  setPersistence,
-  browserLocalPersistence,
 } from "firebase/auth";
 import { auth } from "./firebase";
 import { syncUserAccount } from "./userService";
@@ -17,8 +17,17 @@ import { clearSessionMarker, markSessionActive } from "./authTokenService";
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-async function ensurePersistentSession() {
-  await setPersistence(auth, browserLocalPersistence);
+function shouldUseGoogleRedirect() {
+  if (typeof window === "undefined") return false;
+
+  const isMobile =
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    window.matchMedia?.("(max-width: 768px)")?.matches;
+
+  const isEmbeddedWebView =
+    window.ReactNativeWebView != null || window.VibePush != null;
+
+  return isMobile || isEmbeddedWebView;
 }
 
 function getVerificationSettings() {
@@ -73,8 +82,6 @@ export async function loginWithEmail(email, password) {
   const normalizedEmail = email.trim().toLowerCase();
 
   try {
-    await ensurePersistentSession();
-
     const credential = await signInWithEmailAndPassword(
       auth,
       normalizedEmail,
@@ -98,8 +105,31 @@ export async function loginWithEmail(email, password) {
 
 export async function loginWithGoogle() {
   try {
-    await ensurePersistentSession();
+    if (shouldUseGoogleRedirect()) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+
     const credential = await signInWithPopup(auth, googleProvider);
+    const profile = await syncUserAccount(credential.user, { provider: "google" });
+    markSessionActive(credential.user.uid);
+    return { user: credential.user, profile };
+  } catch (error) {
+    if (error.code === "auth/account-exists-with-different-credential") {
+      const email = error.customData?.email;
+      throw new Error(
+        `O e-mail ${email} já foi cadastrado com senha. Entre com e-mail e senha.`
+      );
+    }
+    wrapAuthError(error);
+  }
+}
+
+export async function completeGoogleRedirectLogin() {
+  try {
+    const credential = await getRedirectResult(auth);
+    if (!credential?.user) return null;
+
     const profile = await syncUserAccount(credential.user, { provider: "google" });
     markSessionActive(credential.user.uid);
     return { user: credential.user, profile };
