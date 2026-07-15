@@ -5,6 +5,7 @@ import {
   indexedDBLocalPersistence,
   browserLocalPersistence,
   browserSessionPersistence,
+  browserPopupRedirectResolver,
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -19,7 +20,16 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
+function isEmbeddedWebView() {
+  if (typeof window === "undefined") return false;
+  return window.ReactNativeWebView != null || window.VibePush != null;
+}
+
 function createAuth() {
+  if (!isEmbeddedWebView()) {
+    return getAuth(app);
+  }
+
   try {
     return initializeAuth(app, {
       persistence: [
@@ -27,6 +37,7 @@ function createAuth() {
         browserLocalPersistence,
         browserSessionPersistence,
       ],
+      popupRedirectResolver: browserPopupRedirectResolver,
     });
   } catch (error) {
     if (error.code === "auth/already-initialized") {

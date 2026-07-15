@@ -17,17 +17,48 @@ import { clearSessionMarker, markSessionActive } from "./authTokenService";
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-function shouldUseGoogleRedirect() {
+const GOOGLE_REDIRECT_FLAG = "vibe.googleRedirectPending";
+
+function hasGoogleRedirectParams() {
   if (typeof window === "undefined") return false;
 
-  const isMobile =
-    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
-    window.matchMedia?.("(max-width: 768px)")?.matches;
+  const { search, hash } = window.location;
+  return (
+    search.includes("apiKey=") ||
+    hash.includes("apiKey=") ||
+    hash.includes("access_token=") ||
+    hash.includes("id_token=")
+  );
+}
+
+function shouldCompleteGoogleRedirect() {
+  if (typeof window === "undefined") return false;
+
+  try {
+    return (
+      sessionStorage.getItem(GOOGLE_REDIRECT_FLAG) === "1" ||
+      hasGoogleRedirectParams()
+    );
+  } catch {
+    return hasGoogleRedirectParams();
+  }
+}
+
+function clearGoogleRedirectFlag() {
+  try {
+    sessionStorage.removeItem(GOOGLE_REDIRECT_FLAG);
+  } catch {
+    // ignore
+  }
+}
+
+function shouldUseGoogleRedirect() {
+  if (typeof window === "undefined") return false;
 
   const isEmbeddedWebView =
     window.ReactNativeWebView != null || window.VibePush != null;
 
-  return isMobile || isEmbeddedWebView;
+  return isEmbeddedWebView;
 }
 
 function getVerificationSettings() {
@@ -106,6 +137,11 @@ export async function loginWithEmail(email, password) {
 export async function loginWithGoogle() {
   try {
     if (shouldUseGoogleRedirect()) {
+      try {
+        sessionStorage.setItem(GOOGLE_REDIRECT_FLAG, "1");
+      } catch {
+        // ignore
+      }
       await signInWithRedirect(auth, googleProvider);
       return null;
     }
@@ -126,20 +162,34 @@ export async function loginWithGoogle() {
 }
 
 export async function completeGoogleRedirectLogin() {
+  if (!shouldCompleteGoogleRedirect()) return null;
+
   try {
     const credential = await getRedirectResult(auth);
+    clearGoogleRedirectFlag();
+
     if (!credential?.user) return null;
 
     const profile = await syncUserAccount(credential.user, { provider: "google" });
     markSessionActive(credential.user.uid);
     return { user: credential.user, profile };
   } catch (error) {
+    clearGoogleRedirectFlag();
+
     if (error.code === "auth/account-exists-with-different-credential") {
       const email = error.customData?.email;
       throw new Error(
         `O e-mail ${email} já foi cadastrado com senha. Entre com e-mail e senha.`
       );
     }
+
+    if (
+      error.code === "auth/argument-error" ||
+      error.code === "auth/no-auth-event"
+    ) {
+      return null;
+    }
+
     wrapAuthError(error);
   }
 }

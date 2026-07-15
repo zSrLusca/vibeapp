@@ -57,11 +57,7 @@ export function AuthProvider({ children }) {
     let unsubscribeAuth = () => {};
 
     async function initAuth() {
-      try {
-        await completeGoogleRedirectLogin();
-      } catch (error) {
-        console.error("Erro no retorno do login Google:", error);
-      }
+      await completeGoogleRedirectLogin();
 
       if (disposed) return;
 
